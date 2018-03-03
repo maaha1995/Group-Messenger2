@@ -156,14 +156,14 @@ public class GroupMessengerActivity extends Activity {
                     Log.d("Server Task","Read the message: "+rec_proposed_msg );
                     String[] rec_pmg = rec_proposed_msg.split("#");
 
-                    Log.d("Server Task","Tag of the message: "+rec_pmg[2] );
+//                    Log.d("Server Task","Tag of the message: "+rec_pmg[2] );
                     if(rec_pmg[2].equals("proposal")){
 
                         String rec_mg = rec_pmg[0];
-                        Log.d("Server Task","Received message: "+rec_mg );
+//                        Log.d("Server Task","Received message: "+rec_mg );
                         String process_id = rec_pmg[1];
                         Log.d("Server Task","Received pid: "+process_id );
-
+                        proposed_id_local++;
                         float proposed_id = Float.valueOf(Integer.toString((int)proposed_id_local) + process_id.substring(1,3));
                         StringBuilder sb1 = new StringBuilder(String.valueOf(proposed_id));
                         sb1.append("#");
@@ -172,14 +172,14 @@ public class GroupMessengerActivity extends Activity {
 
                         Result obj = new Result(proposed_id, rec_mg,false);
 
-                        Log.d("Server Task","Created Result Object " + obj );
+//                        Log.d("Server Task","Created Result Object " + obj );
 
                         queue1.add(obj);
 
-                        Log.d("Server Task","Put them in queue1 " + obj.id );
+//                        Log.d("Server Task","Put them in queue1 " + obj.id );
                         mymap.put(rec_mg,obj);
 
-                        Log.d("Server Task","Put them in map " + rec_mg);
+//                        Log.d("Server Task","Put them in map " + rec_mg);
                         Log.d("Server Task","Ready to be Written to the socket " + sb1.toString());
 
                         String ackToSend = sb1.toString() + "\n";
@@ -193,31 +193,34 @@ public class GroupMessengerActivity extends Activity {
                     }
 
                     if(rec_pmg[2].equals("agreement")){
-
+                        Log.d("ServerTask", "Entering agreement loop");
                         String rec_mg = rec_pmg[0];
 
                         Float agreed_id = Float.parseFloat(rec_pmg[1]);
 
                         Result current_obj = mymap.get(rec_mg);
+                        queue1.remove(current_obj);
                         current_obj.id = agreed_id;
                         current_obj.flag = true;
-
-                        proposed_id_local = Math.max(proposed_id_local,agreed_id)+1;
-
-                        while(!queue1.isEmpty() && queue1.peek().flag==true){
-                            Result obj_to_display = queue1.poll();
-                            String msgToDisplay = obj_to_display.message;
-
-                            publishProgress(msgToDisplay);
-                            count++;
-                            ContentValues contentValues1 = new ContentValues();
-                            contentValues1.put("key",Integer.toString(count));
-                            contentValues1.put("value",msgToDisplay);
-                            getContentResolver() . insert ( mUri ,
-                                    contentValues1 ) ;
-                        }
-
+                        proposed_id_local = agreed_id;
+                        queue1.add(current_obj);
+//                        proposed_id_local = Math.max(proposed_id_local,agreed_id)+1;
                     }
+                    Log.d("ServerTask","PQ before flushing");
+                    displayPQueue();
+                    while(!queue1.isEmpty() && queue1.peek().flag==true){
+                        Result obj_to_display = queue1.poll();
+                        String msgToDisplay = obj_to_display.message;
+
+                        publishProgress(msgToDisplay);
+                        count++;
+                        ContentValues contentValues1 = new ContentValues();
+                        contentValues1.put("key",Integer.toString(count));
+                        contentValues1.put("value",msgToDisplay);
+                        getContentResolver() . insert ( mUri ,
+                                contentValues1 ) ;
+                    }
+                    Log.d("ServerTask","PQ after flushing");
                     displayPQueue();
                     socket.close();
                 }
@@ -231,10 +234,12 @@ public class GroupMessengerActivity extends Activity {
         public void displayPQueue() {
             Log.d(TAG,"PriorityQueue");
             PriorityQueue<Result> pqCopy = new PriorityQueue<Result>(queue1);
+            StringBuilder sb = new StringBuilder();
             while(!pqCopy.isEmpty()){
                 Result obj = pqCopy.poll();
-                Log.d(TAG,"Message id is: " + obj.id + " with flag " + obj.flag);
+                sb.append("id: " + obj.id + " flag: " + obj.flag + "|");
             }
+            Log.d(TAG,sb.toString());
         }
         protected void onProgressUpdate(String...strings) {
 
@@ -266,17 +271,16 @@ public class GroupMessengerActivity extends Activity {
                     Log.d("CLient Task","Created Socket");
                     StringBuilder sb = new StringBuilder(msgToSend);
                     sb.append('#');
-                    Log.d("CLient Task","sb with #" + sb);
+//                    Log.d("CLient Task","sb with #" + sb);
                     String portno = msgs[1];
                     String pid = processid.get(portno);
                     sb.append(pid);
-                    Log.d("CLient Task","sb with pid" + sb.toString());
+//                    Log.d("CLient Task","sb with pid" + sb.toString());
                     sb.append('#');
                     sb.append("proposal");
-//                    sb.append("\n");
-                    Log.d("CLient Task","sb to send: " + sb.toString());
+//                    Log.d("Client Task","sb to send: " + sb.toString());
                     String pmsgToSend = sb.toString() + "\n";
-                    Log.d("CLient Task","msg to send: " + pmsgToSend);
+                    Log.d("Client Task","msg to send: " + pmsgToSend);
 
                     DataOutputStream out =
                             new DataOutputStream(socket.getOutputStream());
