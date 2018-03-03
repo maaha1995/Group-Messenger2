@@ -2,9 +2,16 @@ package edu.buffalo.cse.cse486586.groupmessenger2;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
+import android.database.MatrixCursor;
 import android.net.Uri;
 import android.util.Log;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 
 /**
  * GroupMessengerProvider is a key-value table. Once again, please note that we do not implement
@@ -50,6 +57,23 @@ public class GroupMessengerProvider extends ContentProvider {
          * internal storage option that we used in PA1. If you want to use that option, please
          * take a look at the code for PA1.
          */
+
+        Log.d("VALUES",values.toString());
+
+        String filename = (String)values.get("key");
+        String string = (String)values.get("value") + "\n";
+        FileOutputStream outputStream;
+
+        try {
+            outputStream = getContext().openFileOutput(filename, Context.MODE_PRIVATE);
+            outputStream.write(string.getBytes());
+            outputStream.close();
+            Log.d("insert_method","File write successful");
+        } catch (Exception e) {
+            Log.e("insert_method", "File write failed");
+        }
+
+
         Log.v("insert", values.toString());
         return uri;
     }
@@ -80,7 +104,35 @@ public class GroupMessengerProvider extends ContentProvider {
          * recommend building a MatrixCursor described at:
          * http://developer.android.com/reference/android/database/MatrixCursor.html
          */
+
+
+        StringBuilder sb = null;
+        try {
+
+            FileInputStream input = getContext().openFileInput(selection);
+            InputStreamReader input_reader = new InputStreamReader(input);
+            BufferedReader br = new BufferedReader(input_reader);
+            sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line);
+
+            }
+            //Log.d("Cursor", sb.toString());
+            //Log.d("Cursor", "File_reading_successful");
+        } catch (Exception e) {
+            //Log.d("Cursor", "File_reading_failed");
+        }
+
+        String[] matrixColumns = {"key", "value"};
+        MatrixCursor mco = new MatrixCursor(matrixColumns);
+        mco.addRow(new Object[]{selection, sb});
+        mco.close();
+
+
+
+        Log.d("cursor", "added row");
         Log.v("query", selection);
-        return null;
+        return mco;
     }
 }
