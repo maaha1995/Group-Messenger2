@@ -44,7 +44,7 @@ public class GroupMessengerActivity extends Activity {
     static final Map<String, String> processid = new HashMap<String, String>();
     static final int SERVER_PORT = 10000;
     int count=-1;
-    float proposed_id_local = 0;
+    int proposed_id_local = 0;
 
     class Result implements Comparable<Result>{
         float id;
@@ -64,9 +64,10 @@ public class GroupMessengerActivity extends Activity {
             else if(id < r.id){
                 return -1;
             }
-            else{
+            else if (Math.abs(id - r.id) < 0.01){
                 return 0;
             }
+            return 0;
         }
     }
 
@@ -148,39 +149,30 @@ public class GroupMessengerActivity extends Activity {
             try {
                 while (true) {
                     Socket socket = serverSocket.accept();
-                    Log.d("Server Task","Reached");
+                    Log.d("Server Task", "Reached");
 
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String rec_proposed_msg = in.readLine();
 
-                    Log.d("Server Task","Read the message: "+rec_proposed_msg );
+                    Log.d("Server Task", "Read the message: " + rec_proposed_msg);
                     String[] rec_pmg = rec_proposed_msg.split("#");
-
-//                    Log.d("Server Task","Tag of the message: "+rec_pmg[2] );
-                    if(rec_pmg[2].equals("proposal")){
+                    if (rec_pmg[2].equals("proposal")) {
 
                         String rec_mg = rec_pmg[0];
-//                        Log.d("Server Task","Received message: "+rec_mg );
                         String process_id = rec_pmg[1];
-                        Log.d("Server Task","Received pid: "+process_id );
-                        proposed_id_local++;
-                        float proposed_id = Float.valueOf(Integer.toString((int)proposed_id_local) + process_id.substring(1,3));
+                        Log.d("Server Task", "Received pid: " + process_id);
+                        float proposed_id = Float.valueOf(Integer.toString((int) proposed_id_local) + process_id.substring(1, 3));
+                        proposed_id_local = Math.round(proposed_id) + 1;
                         StringBuilder sb1 = new StringBuilder(String.valueOf(proposed_id));
                         sb1.append("#");
                         sb1.append("ack");
-                        Log.d("Server Task","AckToSend: "+sb1.toString() );
+                        Log.d("Server Task", "AckToSend: " + sb1.toString());
 
-                        Result obj = new Result(proposed_id, rec_mg,false);
-
-//                        Log.d("Server Task","Created Result Object " + obj );
+                        Result obj = new Result(proposed_id, rec_mg, false);
 
                         queue1.add(obj);
-
-//                        Log.d("Server Task","Put them in queue1 " + obj.id );
-                        mymap.put(rec_mg,obj);
-
-//                        Log.d("Server Task","Put them in map " + rec_mg);
-                        Log.d("Server Task","Ready to be Written to the socket " + sb1.toString());
+                        mymap.put(rec_mg, obj);
+                        Log.d("Server Task", "Ready to be Written to the socket " + sb1.toString());
 
                         String ackToSend = sb1.toString() + "\n";
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -188,11 +180,11 @@ public class GroupMessengerActivity extends Activity {
                         out.flush();
 //                        out.close();
 
-                        Log.d("Server Task","Written to the socket " + sb1.toString());
+                        Log.d("Server Task", "Written to the socket " + sb1.toString());
 
                     }
 
-                    if(rec_pmg[2].equals("agreement")){
+                    if (rec_pmg[2].equals("agreement")) {
                         Log.d("ServerTask", "Entering agreement loop");
                         String rec_mg = rec_pmg[0];
 
@@ -202,27 +194,33 @@ public class GroupMessengerActivity extends Activity {
                         queue1.remove(current_obj);
                         current_obj.id = agreed_id;
                         current_obj.flag = true;
-                        proposed_id_local = agreed_id;
+
+                        proposed_id_local = Math.round(agreed_id) + 1;
                         queue1.add(current_obj);
-//                        proposed_id_local = Math.max(proposed_id_local,agreed_id)+1;
+
                     }
-                    Log.d("ServerTask","PQ before flushing");
+
+                    socket.close();
+                    Log.d("ServerTask", "PQ before flushing");
                     displayPQueue();
-                    while(!queue1.isEmpty() && queue1.peek().flag==true){
+
+                    while (!queue1.isEmpty() && queue1.peek().flag == true) {
+
                         Result obj_to_display = queue1.poll();
+
                         String msgToDisplay = obj_to_display.message;
 
                         publishProgress(msgToDisplay);
                         count++;
                         ContentValues contentValues1 = new ContentValues();
-                        contentValues1.put("key",Integer.toString(count));
-                        contentValues1.put("value",msgToDisplay);
-                        getContentResolver() . insert ( mUri ,
-                                contentValues1 ) ;
+                        contentValues1.put("key", Integer.toString(count));
+                        contentValues1.put("value", msgToDisplay);
+                        getContentResolver().insert(mUri, contentValues1);
+
+
+                        Log.d("ServerTask", "PQ after flushing");
+                        displayPQueue();
                     }
-                    Log.d("ServerTask","PQ after flushing");
-                    displayPQueue();
-                    socket.close();
                 }
             }
             catch (IOException e) {
@@ -246,7 +244,7 @@ public class GroupMessengerActivity extends Activity {
             String strReceived = strings[0].trim();
             TextView tv = (TextView) findViewById(R.id.textView1);
             tv.append("\t\n"+strReceived);
-            tv.append("\n");
+//            tv.append("\n");
             return;
         }
     }
@@ -271,14 +269,11 @@ public class GroupMessengerActivity extends Activity {
                     Log.d("CLient Task","Created Socket");
                     StringBuilder sb = new StringBuilder(msgToSend);
                     sb.append('#');
-//                    Log.d("CLient Task","sb with #" + sb);
                     String portno = msgs[1];
                     String pid = processid.get(portno);
                     sb.append(pid);
-//                    Log.d("CLient Task","sb with pid" + sb.toString());
                     sb.append('#');
                     sb.append("proposal");
-//                    Log.d("Client Task","sb to send: " + sb.toString());
                     String pmsgToSend = sb.toString() + "\n";
                     Log.d("Client Task","msg to send: " + pmsgToSend);
 
@@ -289,12 +284,12 @@ public class GroupMessengerActivity extends Activity {
                     out.flush();
 
 
-                    Log.d("CLient Task","Written to the socket " + pmsgToSend);
+                    Log.d("Client Task","Written to the socket " + pmsgToSend);
 
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String rec_proposed_id = in.readLine();
 
-                    Log.d("CLient Task","ack_received: ");
+                    Log.d("Client Task","ack_received: ");
 
                     String[] rec_pid = rec_proposed_id.split("#");
 
@@ -303,7 +298,6 @@ public class GroupMessengerActivity extends Activity {
                         in.close();
                         socket.close();
                     }
-
                 }
 
                 for (int i = 0; i < remotePort.length; i++){
@@ -315,14 +309,13 @@ public class GroupMessengerActivity extends Activity {
                     sb2.append(String.valueOf(global_count));
                     sb2.append('#');
                     sb2.append("agreement");
-                    String amsgToSend = sb2.toString();
-                    PrintWriter out =
-                            new PrintWriter(socket.getOutputStream(), true);
-                    out.write(amsgToSend);
+                    String amsgToSend = sb2.toString()+"\n";
+                    DataOutputStream out =
+                            new DataOutputStream(socket.getOutputStream());
+                    out.writeBytes(amsgToSend);
                     out.flush();
                     out.close();
                     socket.close();
-
                 }
 
             } catch(UnknownHostException e){
