@@ -19,12 +19,16 @@ import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.InterruptedIOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.PriorityQueue;
 
@@ -45,6 +49,11 @@ public class GroupMessengerActivity extends Activity {
     static final int SERVER_PORT = 10000;
     int count=-1;
     int proposed_id_local = 0;
+    int failed_avd = -1;
+    boolean avd = false;
+
+    PriorityQueue<Result> queue1 = new PriorityQueue<Result>();
+    Map<String,Result> mymap = new HashMap<String, Result>();
 
     class Result implements Comparable<Result>{
         float id;
@@ -71,8 +80,7 @@ public class GroupMessengerActivity extends Activity {
         }
     }
 
-    PriorityQueue<Result> queue1 = new PriorityQueue<Result>();
-    Map<String,Result> mymap = new HashMap<String, Result>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -147,32 +155,30 @@ public class GroupMessengerActivity extends Activity {
             ServerSocket serverSocket = sockets[0];
 
             try {
+               // serverSocket.setSoTimeout(500);
                 while (true) {
                     Socket socket = serverSocket.accept();
-                    Log.d("Server Task", "Reached");
 
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String rec_proposed_msg = in.readLine();
 
-                    Log.d("Server Task", "Read the message: " + rec_proposed_msg);
                     String[] rec_pmg = rec_proposed_msg.split("#");
                     if (rec_pmg[2].equals("proposal")) {
 
                         String rec_mg = rec_pmg[0];
                         String process_id = rec_pmg[1];
-                        Log.d("Server Task", "Received pid: " + process_id);
+
                         float proposed_id = Float.valueOf(Integer.toString((int) proposed_id_local) + process_id.substring(1, 3));
                         proposed_id_local = Math.round(proposed_id) + 1;
                         StringBuilder sb1 = new StringBuilder(String.valueOf(proposed_id));
                         sb1.append("#");
                         sb1.append("ack");
-                        Log.d("Server Task", "AckToSend: " + sb1.toString());
 
                         Result obj = new Result(proposed_id, rec_mg, false);
 
                         queue1.add(obj);
                         mymap.put(rec_mg, obj);
-                        Log.d("Server Task", "Ready to be Written to the socket " + sb1.toString());
+
 
                         String ackToSend = sb1.toString() + "\n";
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -180,12 +186,11 @@ public class GroupMessengerActivity extends Activity {
                         out.flush();
 //                        out.close();
 
-                        Log.d("Server Task", "Written to the socket " + sb1.toString());
 
                     }
 
                     if (rec_pmg[2].equals("agreement")) {
-                        Log.d("ServerTask", "Entering agreement loop");
+
                         String rec_mg = rec_pmg[0];
 
                         Float agreed_id = Float.parseFloat(rec_pmg[1]);
@@ -198,11 +203,37 @@ public class GroupMessengerActivity extends Activity {
                         proposed_id_local = Math.round(agreed_id) + 1;
                         queue1.add(current_obj);
 
+                        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                        out.writeBytes("received_agreement");
+                        out.flush();
+
+                    }
+
+                    if(rec_pmg[2].equals("failure")){
+
+                        String avd_number = rec_pmg[1];
+                        failed_avd = Integer.parseInt(avd_number);
+                        avd = true;
+
+                        Iterator<Result> itr =queue1.iterator();
+
+                        while(itr.hasNext()){
+                        Result obj = itr.next();
+                        float id = obj.id;
+                        String id1 = String.valueOf(id);
+                        String[] id2 = id1.split(".");
+                        if(id2[1].equals(Integer.parseInt(avd_number))){
+                            queue1.remove(obj);
+                        }
+                        }
+
+                        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                        out.writeBytes("received_failure");
+                        out.flush();
+
                     }
 
                     socket.close();
-                    Log.d("ServerTask", "PQ before flushing");
-                    displayPQueue();
 
                     while (!queue1.isEmpty() && queue1.peek().flag == true) {
 
@@ -217,12 +248,10 @@ public class GroupMessengerActivity extends Activity {
                         contentValues1.put("value", msgToDisplay);
                         getContentResolver().insert(mUri, contentValues1);
 
-
-                        Log.d("ServerTask", "PQ after flushing");
-                        displayPQueue();
                     }
                 }
             }
+
             catch (IOException e) {
                 e.printStackTrace();
             }
@@ -230,21 +259,20 @@ public class GroupMessengerActivity extends Activity {
         }
 
         public void displayPQueue() {
-            Log.d(TAG,"PriorityQueue");
+
             PriorityQueue<Result> pqCopy = new PriorityQueue<Result>(queue1);
             StringBuilder sb = new StringBuilder();
             while(!pqCopy.isEmpty()){
                 Result obj = pqCopy.poll();
                 sb.append("id: " + obj.id + " flag: " + obj.flag + "|");
             }
-            Log.d(TAG,sb.toString());
+
         }
         protected void onProgressUpdate(String...strings) {
 
             String strReceived = strings[0].trim();
             TextView tv = (TextView) findViewById(R.id.textView1);
             tv.append("\t\n"+strReceived);
-//            tv.append("\n");
             return;
         }
     }
@@ -253,82 +281,175 @@ public class GroupMessengerActivity extends Activity {
 
         @Override
         protected Void doInBackground(String... msgs) {
-            try {
-                Log.d("PortNumber","port no: "+msgs[1]);
-                String[] remotePort = {REMOTE_PORT0, REMOTE_PORT1, REMOTE_PORT2, REMOTE_PORT3, REMOTE_PORT4};
 
+                String[] remotePort = {REMOTE_PORT0, REMOTE_PORT1, REMOTE_PORT2, REMOTE_PORT3, REMOTE_PORT4};
                 float global_count = 0;
                 String msgToSend = msgs[0];
+                try {
+                    for (int i = 0; i < remotePort.length; i++) {
+                        if (i == failed_avd) {
+                            continue;
+                        }
+                        try {
+                            Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                    Integer.parseInt(remotePort[i]));
+
+                            StringBuilder sb = new StringBuilder(msgToSend);
+                            sb.append('#');
+                            String portno = msgs[1];
+                            String pid = processid.get(portno);
+                            sb.append(pid);
+                            sb.append('#');
+                            sb.append("proposal");
+                            String pmsgToSend = sb.toString() + "\n"; //-s
+
+                            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                            out.writeBytes(pmsgToSend);
+                            out.flush();
+//                        out.close();
+
+                            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                            String rec_proposed_id = in.readLine();
+
+                            if (rec_proposed_id == null || rec_proposed_id.isEmpty()) {
+                                failed_avd = i;
+                                in.close();
+                                socket.close();
+                                Log.d("CLIENT TASK", "THROWN A NULLPOINTER EXCEPTION in proposal loop");
+                                throw new NullPointerException();
+                            } else {
+                                String[] rec_pid = rec_proposed_id.split("#");
+                                if (rec_pid[1].equals("ack")) {
+                                    global_count = Math.max(global_count, Float.parseFloat(rec_pid[0]));
+                                    in.close();
+                                    socket.close();
+                                }
+                            }
+                        } catch (Exception e) {
+
+                            Log.d("Caught at proposal loop", e.toString());
+                        }
 
 
-                for (int i = 0; i < remotePort.length; i++) {
-
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                            Integer.parseInt(remotePort[i]));
-
-                    Log.d("CLient Task","Created Socket");
-                    StringBuilder sb = new StringBuilder(msgToSend);
-                    sb.append('#');
-                    String portno = msgs[1];
-                    String pid = processid.get(portno);
-                    sb.append(pid);
-                    sb.append('#');
-                    sb.append("proposal");
-                    String pmsgToSend = sb.toString() + "\n";
-                    Log.d("Client Task","msg to send: " + pmsgToSend);
-
-                    DataOutputStream out =
-                            new DataOutputStream(socket.getOutputStream());
-
-                    out.writeBytes(pmsgToSend);
-                    out.flush();
-
-
-                    Log.d("Client Task","Written to the socket " + pmsgToSend);
-
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    String rec_proposed_id = in.readLine();
-
-                    Log.d("Client Task","ack_received: ");
-
-                    String[] rec_pid = rec_proposed_id.split("#");
-
-                    if(rec_pid[1].equals("ack")) {
-                        global_count = Math.max(global_count, Float.parseFloat(rec_pid[0]));
-                        in.close();
-                        socket.close();
                     }
+
+                    if (failed_avd != -1 && avd == false) {
+                        try {
+                            for (int i = 0; i < remotePort.length; i++) {
+                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                        Integer.parseInt(remotePort[i]));
+                                if (i == failed_avd) {
+                                    continue;
+                                }
+                                StringBuilder sb3 = new StringBuilder("Message");
+                                sb3.append('#');
+                                sb3.append(Integer.toString(failed_avd));
+                                sb3.append('#');
+                                sb3.append("failure");
+                                DataOutputStream out =
+                                        new DataOutputStream(socket.getOutputStream());
+                                out.writeBytes(sb3.toString());
+                                out.flush();
+                                //  out.close();
+
+
+                                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                                String rec_ack = in.readLine();
+
+                                if (rec_ack.equals("received_failure")) {
+                                    in.close();
+                                    socket.close();
+                                }
+
+                                avd = true;
+                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    for (int i = 0; i < remotePort.length; i++) {
+
+                        try {
+                            if (i == failed_avd) {
+                                continue;
+                            }
+
+                            Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                    Integer.parseInt(remotePort[i]));
+                            StringBuilder sb2 = new StringBuilder(msgToSend);
+                            sb2.append('#');
+                            sb2.append(String.valueOf(global_count));
+                            sb2.append('#');
+                            sb2.append("agreement");
+                            String amsgToSend = sb2.toString() + "\n";
+                            DataOutputStream out =
+                                    new DataOutputStream(socket.getOutputStream());
+                            out.writeBytes(amsgToSend);
+                            out.flush();
+                            //      out.close();
+
+                            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                            String rec_ack = in.readLine();
+                            if (rec_ack == null || rec_ack.isEmpty()) {
+                                failed_avd = i;
+                                in.close();
+                                socket.close();
+                                Log.d("CLIENT TASK", "THROWN A NULLPOINTER EXCEPTION in agreement loop");
+                                throw new NullPointerException();
+
+                            } else {
+                                if (rec_ack.equals("received_agreement")) {
+                                    in.close();
+                                    socket.close();
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.d("Caught at Agreementloop", e.toString());
+                        }
+                    }
+
+                    if (failed_avd != -1 && avd == false) {
+                        try {
+                            for (int i = 0; i < remotePort.length; i++) {
+                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                        Integer.parseInt(remotePort[i]));
+                                if (i == failed_avd) {
+                                    continue;
+                                }
+                                StringBuilder sb3 = new StringBuilder("Message");
+                                sb3.append('#');
+                                sb3.append(Integer.toString(failed_avd));
+                                sb3.append('#');
+                                sb3.append("failure");
+                                DataOutputStream out =
+                                        new DataOutputStream(socket.getOutputStream());
+                                out.writeBytes(sb3.toString());
+                                out.flush();
+                                // out.close();
+
+
+                                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                                String rec_ack = in.readLine();
+
+                                if (rec_ack.equals("received_failure")) {
+                                    in.close();
+                                    socket.close();
+                                }
+
+
+                                avd = true;
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                } catch(Exception e){
+                    e.printStackTrace();
                 }
-
-                for (int i = 0; i < remotePort.length; i++){
-
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                            Integer.parseInt(remotePort[i]));
-                    StringBuilder sb2 = new StringBuilder(msgToSend);
-                    sb2.append('#');
-                    sb2.append(String.valueOf(global_count));
-                    sb2.append('#');
-                    sb2.append("agreement");
-                    String amsgToSend = sb2.toString()+"\n";
-                    DataOutputStream out =
-                            new DataOutputStream(socket.getOutputStream());
-                    out.writeBytes(amsgToSend);
-                    out.flush();
-                    out.close();
-                    socket.close();
-                }
-
-            } catch(UnknownHostException e){
-                Log.e(TAG, "ClientTask UnknownHostException");
-            } catch(IOException e){
-                Log.e(TAG, "ClientTask socket IOException");
-                e.printStackTrace();
-            }
-
             return null;
         }
     }
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
