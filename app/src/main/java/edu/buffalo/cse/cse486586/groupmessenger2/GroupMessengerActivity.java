@@ -27,6 +27,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -79,7 +80,6 @@ public class GroupMessengerActivity extends Activity {
             return 0;
         }
     }
-
 
 
     @Override
@@ -185,8 +185,6 @@ public class GroupMessengerActivity extends Activity {
                         out.writeBytes(ackToSend);
                         out.flush();
 //                        out.close();
-
-
                     }
 
                     if (rec_pmg[2].equals("agreement")) {
@@ -204,7 +202,7 @@ public class GroupMessengerActivity extends Activity {
                         queue1.add(current_obj);
 
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                        out.writeBytes("received_agreement");
+                        out.writeBytes("received_agreement\n");
                         out.flush();
 
                     }
@@ -215,25 +213,26 @@ public class GroupMessengerActivity extends Activity {
                         failed_avd = Integer.parseInt(avd_number);
                         avd = true;
 
-                        Iterator<Result> itr =queue1.iterator();
+                        Iterator<Result> itr = queue1.iterator();
 
                         while(itr.hasNext()){
-                        Result obj = itr.next();
-                        float id = obj.id;
-                        String id1 = String.valueOf(id);
-                        String[] id2 = id1.split(".");
-                        if(id2[1].equals(Integer.parseInt(avd_number))){
-                            queue1.remove(obj);
-                        }
+                            Result obj = itr.next();
+                            float id = obj.id;
+                            String id1 = Float.toString(id);
+
+                            String[] id2 = id1.split("\\.");
+
+                            Log.d("failure", "msg id is: " + Arrays.toString(id2));
+                            if(id2[1].equals(avd_number)){
+                                queue1.remove(obj);
+                            }
                         }
 
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                        out.writeBytes("received_failure");
+                        out.writeBytes("received_failure\n");
                         out.flush();
 
                     }
-
-                    socket.close();
 
                     while (!queue1.isEmpty() && queue1.peek().flag == true) {
 
@@ -249,6 +248,7 @@ public class GroupMessengerActivity extends Activity {
                         getContentResolver().insert(mUri, contentValues1);
 
                     }
+                    socket.close();
                 }
             }
 
@@ -301,7 +301,7 @@ public class GroupMessengerActivity extends Activity {
                             sb.append(pid);
                             sb.append('#');
                             sb.append("proposal");
-                            String pmsgToSend = sb.toString() + "\n"; //-s
+                            String pmsgToSend = sb.toString() + "\n";
 
                             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                             out.writeBytes(pmsgToSend);
@@ -332,15 +332,17 @@ public class GroupMessengerActivity extends Activity {
 
 
                     }
-
+                    Log.d("failed", "failed avd is :" + failed_avd );
                     if (failed_avd != -1 && avd == false) {
                         try {
                             for (int i = 0; i < remotePort.length; i++) {
-                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                        Integer.parseInt(remotePort[i]));
+
                                 if (i == failed_avd) {
                                     continue;
                                 }
+                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                        Integer.parseInt(remotePort[i]));
+
                                 StringBuilder sb3 = new StringBuilder("Message");
                                 sb3.append('#');
                                 sb3.append(Integer.toString(failed_avd));
@@ -348,7 +350,7 @@ public class GroupMessengerActivity extends Activity {
                                 sb3.append("failure");
                                 DataOutputStream out =
                                         new DataOutputStream(socket.getOutputStream());
-                                out.writeBytes(sb3.toString());
+                                out.writeBytes(sb3.toString() + "\n");
                                 out.flush();
                                 //  out.close();
 
@@ -408,15 +410,16 @@ public class GroupMessengerActivity extends Activity {
                             Log.d("Caught at Agreementloop", e.toString());
                         }
                     }
-
+                    Log.d("failed", "failed avd after agreement is :" + failed_avd );
                     if (failed_avd != -1 && avd == false) {
                         try {
                             for (int i = 0; i < remotePort.length; i++) {
-                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                                        Integer.parseInt(remotePort[i]));
                                 if (i == failed_avd) {
                                     continue;
                                 }
+                                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                        Integer.parseInt(remotePort[i]));
+
                                 StringBuilder sb3 = new StringBuilder("Message");
                                 sb3.append('#');
                                 sb3.append(Integer.toString(failed_avd));
@@ -424,10 +427,9 @@ public class GroupMessengerActivity extends Activity {
                                 sb3.append("failure");
                                 DataOutputStream out =
                                         new DataOutputStream(socket.getOutputStream());
-                                out.writeBytes(sb3.toString());
+                                out.writeBytes(sb3.toString() + "\n");
                                 out.flush();
                                 // out.close();
-
 
                                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                                 String rec_ack = in.readLine();
@@ -436,7 +438,6 @@ public class GroupMessengerActivity extends Activity {
                                     in.close();
                                     socket.close();
                                 }
-
 
                                 avd = true;
                             }
