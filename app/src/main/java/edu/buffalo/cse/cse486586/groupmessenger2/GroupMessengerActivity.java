@@ -93,7 +93,6 @@ public class GroupMessengerActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_group_messenger);
 
-
         TelephonyManager tel = (TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE);
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
         final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
@@ -119,7 +118,7 @@ public class GroupMessengerActivity extends Activity {
                 if ((event.getAction() == KeyEvent.ACTION_DOWN) &&
                         (keyCode == KeyEvent.KEYCODE_ENTER)) {
                     String msg = editText.getText().toString();
-                    editText.setText("");// This is one way to reset the input box.
+                    editText.setText("");
 
                     new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, msg, myPort);
                     return true;
@@ -155,13 +154,13 @@ public class GroupMessengerActivity extends Activity {
             ServerSocket serverSocket = sockets[0];
 
             try {
-               // serverSocket.setSoTimeout(500);
                 while (true) {
                     Socket socket = serverSocket.accept();
 
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     String rec_proposed_msg = in.readLine();
-
+                    if (rec_proposed_msg == null)
+                        return null;
                     String[] rec_pmg = rec_proposed_msg.split("#");
                     if (rec_pmg[2].equals("proposal")) {
 
@@ -184,7 +183,6 @@ public class GroupMessengerActivity extends Activity {
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                         out.writeBytes(ackToSend);
                         out.flush();
-//                        out.close();
                     }
 
                     if (rec_pmg[2].equals("agreement")) {
@@ -204,7 +202,6 @@ public class GroupMessengerActivity extends Activity {
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                         out.writeBytes("received_agreement\n");
                         out.flush();
-
                     }
 
                     if(rec_pmg[2].equals("failure")){
@@ -222,7 +219,6 @@ public class GroupMessengerActivity extends Activity {
 
                             String[] id2 = id1.split("\\.");
 
-                            Log.d("failure", "msg id is: " + Arrays.toString(id2));
                             if(id2[1].equals(avd_number)){
                                 queue1.remove(obj);
                             }
@@ -258,16 +254,6 @@ public class GroupMessengerActivity extends Activity {
             return null;
         }
 
-        public void displayPQueue() {
-
-            PriorityQueue<Result> pqCopy = new PriorityQueue<Result>(queue1);
-            StringBuilder sb = new StringBuilder();
-            while(!pqCopy.isEmpty()){
-                Result obj = pqCopy.poll();
-                sb.append("id: " + obj.id + " flag: " + obj.flag + "|");
-            }
-
-        }
         protected void onProgressUpdate(String...strings) {
 
             String strReceived = strings[0].trim();
@@ -306,18 +292,17 @@ public class GroupMessengerActivity extends Activity {
                             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                             out.writeBytes(pmsgToSend);
                             out.flush();
-//                        out.close();
 
                             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                             String rec_proposed_id = in.readLine();
 
                             if (rec_proposed_id == null || rec_proposed_id.isEmpty()) {
-                                failed_avd = i;
+
                                 in.close();
                                 socket.close();
-                                Log.d("CLIENT TASK", "THROWN A NULLPOINTER EXCEPTION in proposal loop");
                                 throw new NullPointerException();
-                            } else {
+                            }
+                            else {
                                 String[] rec_pid = rec_proposed_id.split("#");
                                 if (rec_pid[1].equals("ack")) {
                                     global_count = Math.max(global_count, Float.parseFloat(rec_pid[0]));
@@ -326,13 +311,12 @@ public class GroupMessengerActivity extends Activity {
                                 }
                             }
                         } catch (Exception e) {
+                            failed_avd = i;
 
-                            Log.d("Caught at proposal loop", e.toString());
                         }
 
-
                     }
-                    Log.d("failed", "failed avd is :" + failed_avd );
+
                     if (failed_avd != -1 && avd == false) {
                         try {
                             for (int i = 0; i < remotePort.length; i++) {
@@ -352,8 +336,6 @@ public class GroupMessengerActivity extends Activity {
                                         new DataOutputStream(socket.getOutputStream());
                                 out.writeBytes(sb3.toString() + "\n");
                                 out.flush();
-                                //  out.close();
-
 
                                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                                 String rec_ack = in.readLine();
@@ -389,15 +371,14 @@ public class GroupMessengerActivity extends Activity {
                                     new DataOutputStream(socket.getOutputStream());
                             out.writeBytes(amsgToSend);
                             out.flush();
-                            //      out.close();
+
 
                             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                             String rec_ack = in.readLine();
                             if (rec_ack == null || rec_ack.isEmpty()) {
-                                failed_avd = i;
+
                                 in.close();
                                 socket.close();
-                                Log.d("CLIENT TASK", "THROWN A NULLPOINTER EXCEPTION in agreement loop");
                                 throw new NullPointerException();
 
                             } else {
@@ -407,10 +388,10 @@ public class GroupMessengerActivity extends Activity {
                                 }
                             }
                         } catch (Exception e) {
-                            Log.d("Caught at Agreementloop", e.toString());
+                            failed_avd = i;
                         }
                     }
-                    Log.d("failed", "failed avd after agreement is :" + failed_avd );
+
                     if (failed_avd != -1 && avd == false) {
                         try {
                             for (int i = 0; i < remotePort.length; i++) {
@@ -429,7 +410,6 @@ public class GroupMessengerActivity extends Activity {
                                         new DataOutputStream(socket.getOutputStream());
                                 out.writeBytes(sb3.toString() + "\n");
                                 out.flush();
-                                // out.close();
 
                                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                                 String rec_ack = in.readLine();

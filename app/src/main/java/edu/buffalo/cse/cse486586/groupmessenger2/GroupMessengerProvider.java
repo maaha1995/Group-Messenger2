@@ -93,17 +93,6 @@ public class GroupMessengerProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
                         String sortOrder) {
-        /*
-         * TODO: You need to implement this method. Note that you need to return a Cursor object
-         * with the right format. If the formatting is not correct, then it is not going to work.
-         *
-         * If you use SQLite, whatever is returned from SQLite is a Cursor object. However, you
-         * still need to be careful because the formatting might still be incorrect.
-         *
-         * If you use a file storage option, then it is your job to build a Cursor * object. I
-         * recommend building a MatrixCursor described at:
-         * http://developer.android.com/reference/android/database/MatrixCursor.html
-         */
 
 
         StringBuilder sb = null;
@@ -118,10 +107,9 @@ public class GroupMessengerProvider extends ContentProvider {
                 sb.append(line);
 
             }
-            //Log.d("Cursor", sb.toString());
-            //Log.d("Cursor", "File_reading_successful");
+
         } catch (Exception e) {
-            //Log.d("Cursor", "File_reading_failed");
+            Log.d("Cursor", "File_reading_failed");
         }
 
         String[] matrixColumns = {"key", "value"};
